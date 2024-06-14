@@ -1,0 +1,113 @@
+#!/usr/bin/env node
+
+const Idea = require("../lib")
+    , logger = require("bug-killer")
+    , Table = require("le-table")
+    , couleurs = require("couleurs")
+    , ansiParser = require("ansi-parser")
+    , Daty = require("daty")
+    ;
+
+// Defaults
+Table.defaults.marks = {
+    nw: "┌"
+  , n:  "─"
+  , ne: "┐"
+  , e:  "│"
+  , se: "┘"
+  , s:  "─"
+  , sw: "└"
+  , w:  "│"
+  , b: " "
+  , mt: "┬"
+  , ml: "├"
+  , mr: "┤"
+  , mb: "┴"
+  , mm: "┼"
+};
+
+function display(arr) {
+    if (!arr.length) {
+        return logger.log("No ideas fetched.", "info");
+    }
+    var tbl = new Table()
+      , i = 0
+      , c = 0
+      ;
+
+    tbl.addRow([
+        couleurs("Id").bold()
+      , couleurs("Date").bold()
+      , couleurs("State").bold()
+      , couleurs("Idea").bold()
+    ]);
+
+    for (; i < arr.length; ++i) {
+        c = arr[i];
+        c.date = new Daty(c.date).format("dddd, MM/DD/YYYY");
+        tbl.addRow([c.id + 1, c.date, c.state, c.idea]);
+    }
+
+    console.log(ansiParser.removeAnsi(tbl.toString()));
+}
+
+var idea = new Idea(err => {
+    if (err) { return logger.log(err, "error"); }
+    var commands = {
+        create: callback => {
+            idea.create(process.argv[3], err => {
+                if (err) { return callback(err); }
+                callback("Idea was added.");
+            });
+            idea.save();
+        }
+      , list: callback => {
+            idea.filter({}, callback);
+        }
+      , filter: callback => {
+            try {
+                var filter = JSON.parse(process.argv[3] || "{ \"state\": \"OPEN\" }");
+            } catch (e) {
+                return callback("Cannot parse the filter.", "error");
+            }
+            idea.filter(filter, callback);
+        }
+      , solve: callback => {
+            idea.solve(process.argv[3], () => {
+                if (err) { return callback(err); }
+                callback("Idea was solved.");
+            });
+            idea.save();
+        }
+      , help: () => {
+            console.log(require("./docs/help"));
+        }
+      , remove: () => {
+            idea.remove(process.argv[3], () => {
+                if (err) { return callback(err); }
+                callback("Idea was removed");
+            });
+            idea.save();
+      }
+    };
+
+    if (~process.argv.indexOf("-h") || ~process.argv.indexOf("--help")) {
+      return commands.help();
+    }
+
+    if (!commands[process.argv[2]]) {
+        process.argv[2] = "filter";
+    }
+
+    commands[process.argv[2]]((err, res) => {
+        if (err) {
+            return logger.log(err, "error");
+        }
+
+        if (typeof res === "string") {
+            return logger.log(res, "info");
+        }
+
+        display(res);
+    });
+});
